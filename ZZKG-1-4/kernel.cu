@@ -3,45 +3,52 @@
 
 #include <cstdio>
 #include <iostream>
+#include "kernel.h"
 
-const int N = 1024;
+const int N = 32;
+const int M = 64;
 const int blockSize = 16;
 
-__global__ void add_matrix(float *a, float *b, float *c, int N)
+__global__ void add_matrix(float *a, int N, int M)
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
+
 	int index = i + j * N;
-	if (i < N && j < N) c[index] = a[index] + b[index];
+
+	if (i < N && j < M) {
+		a[index] += j;
+	}
 }
 
 int main()
 {
-	float *a = new float[N*N];
-	float *b = new float[N*N];
-	float *c = new float[N*N];
+	float *a = new float[N*M];
 
-	for (int i = 0; i < N*N; ++i) { a[i] = 1.0f; b[i] = 3.5f; }
-	float *ad, *bd, *cd;
-	const int size = N * N * sizeof(float);
+	for (int i = 0; i < N*M; ++i) {		a[i] = 0.0f; 	}
+	float *ad;
+	const int size = N * M * sizeof(float);
 	cudaMalloc((void**)&ad, size);
-	cudaMalloc((void**)&bd, size);
-	cudaMalloc((void**)&cd, size);
-
-	cudaMemcpy(ad, a, size, cudaMemcpyHostToDevice);
-	cudaMemcpy(bd, b, size, cudaMemcpyHostToDevice);
-	dim3 dimBlock(blockSize, blockSize);
-	dim3 dimGrid(N / dimBlock.x, N / dimBlock.y);
-	add_matrix <<<dimGrid, dimBlock >> > (ad, bd, cd, N);
-	cudaMemcpy(c, cd, size, cudaMemcpyDeviceToHost);
-	cudaFree(ad); cudaFree(bd); cudaFree(cd);
 	
-	for (int i = 0; i < N * N; ++i) {
-		std::cout << c[i];
+	cudaMemcpy(ad, a, size, cudaMemcpyHostToDevice);
+	dim3 dimBlock(blockSize, blockSize);
+	const int gridN = N / dimBlock.x + ((N % blockSize) != 0);
+	const int gridM = M / dimBlock.y + ((M % blockSize) != 0);
+	dim3 dimGrid(gridN, gridM);
+	add_matrix <<<dimGrid, dimBlock >> > (ad, N, M);
+	cudaMemcpy(a, ad, size, cudaMemcpyDeviceToHost);
+	cudaFree(ad);
+
+	for (int j = 0; j < M; ++j) {
+		for (int i = 0; i < N; ++i) {
+			const int index = j * N + i;
+			std::cout << a[index];
+		}
+		std::cout << "\n";
 	}
 	std::cout << "\n";
 
-	delete[] a; delete[] b; delete[] c;
+	delete[] a;
 
     return 0;
 }
