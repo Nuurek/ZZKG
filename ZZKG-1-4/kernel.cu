@@ -5,44 +5,47 @@
 #include <iostream>
 #include "kernel.h"
 
-const int N = 512;
+const int N = 144;
 const int blockSize = 16;
 
-__global__ void generate_matrix(float *a, int N)
+__global__ void swapMatrix(float *a, int N)
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
 	int index = i + j * N;
+	const int numberOfThreads = N / 2;
 
-	if (i < N && j < N) {
-		a[index] = i * j;
+	if (index < numberOfThreads) {
+		const int toSwapIndex = N - 1 - index;
+		const float toSwap = a[toSwapIndex];
+		a[toSwapIndex] = a[index];
+		a[index] = toSwap;
 	}
 }
 
 int main()
 {
-	float *a = new float[N*N];
+	float *a = new float[N];
 
-	for (int i = 0; i < N*N; ++i) {		a[i] = 0.0f; 	}
+	for (int i = 0; i < N; ++i) {		a[i] = i;
+		std::cout << a[i] << " ";	}
+	std::cout << "\n";
 	float *ad;
-	const int size = N * N * sizeof(float);
+	const int size = N * sizeof(float);
 	cudaMalloc((void**)&ad, size);
 	
 	cudaMemcpy(ad, a, size, cudaMemcpyHostToDevice);
-	dim3 dimBlock(blockSize, blockSize);
-	const int gridSize = N / dimBlock.x + ((N % blockSize) != 0);
-	dim3 dimGrid(gridSize, gridSize);
-	generate_matrix<<<dimGrid, dimBlock >>>(ad, N);
+	const int numberOfThreads = N / 2;
+	dim3 dimBlock(blockSize);
+	const int gridSize = numberOfThreads / dimBlock.x + ((numberOfThreads % blockSize) != 0);
+	dim3 dimGrid(gridSize);
+	swapMatrix<<<dimGrid, dimBlock >>>(ad, N);
 	cudaMemcpy(a, ad, size, cudaMemcpyDeviceToHost);
 	cudaFree(ad);
 
-	for (int j = 0; j < N; ++j) {
-		for (int i = 0; i < N; ++i) {
-			const int index = j * N + i;
-			std::cout << a[index] << " ";
-		}
-		std::cout << "\n";
+	for (int i = 0; i < N; ++i) {
+		std::cout << a[i] << " ";
 	}
 	std::cout << "\n";
 
