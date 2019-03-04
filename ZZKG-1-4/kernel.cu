@@ -9,22 +9,19 @@
 #include <cmath>
 #include "kernel.h"
 
-const size_t arraySize = 5000;
+const size_t arraySize = 72363;
 const size_t blockSize = 16;
-const size_t shift = 10;
 
-__global__ void calculate(float *input, float *output)
+__global__ void calculate(int k, int *data)
 {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	int index = k * (blockIdx.x * blockDim.x + threadIdx.x);
 
-	if (index < arraySize) {
-		output[(index + shift) % arraySize] = input[index];
-	}
+	data[index] = data[index] + data[index + k];
 }
 
 int main()
 {
-	thrust::host_vector<float> hostInput(arraySize);
+	thrust::host_vector<int> hostInput(arraySize);
 
 	for (size_t i = 0; i < arraySize; i++) {
 		hostInput[i] = i;
@@ -32,20 +29,23 @@ int main()
 	}
 	std::cout << "\n";
 
-	thrust::device_vector<float> deviceInput = hostInput;
-	thrust::device_vector<float> deviceOutput(arraySize);
+	thrust::device_vector<int> deviceInput = hostInput;
+	thrust::device_vector<int> deviceOutput(arraySize);
 
-	dim3 dimBlock(blockSize);
-	const int gridSize = arraySize / dimBlock.x + ((arraySize % dimBlock.x) != 0);
-	dim3 dimGrid(gridSize);
-	calculate<<<dimGrid, dimBlock >>> (deviceInput.data().get(), deviceOutput.data().get());
+	for (int k = 1; k < arraySize; k *= 2) {
+		const size_t numberOfThreads = arraySize / k;
+		dim3 dimBlock(blockSize);
+		const int gridSize = numberOfThreads / dimBlock.x + ((numberOfThreads % dimBlock.x) != 0);
+		dim3 dimGrid(gridSize);
+		calculate << <dimGrid, dimBlock >> > (k, deviceInput.data().get());
 
-	thrust::host_vector<float> hostOutput = deviceOutput;
+		thrust::host_vector<int> hostOutput = deviceInput;
 
-	for (const auto& element : hostOutput) {
-		std::cout << element << ", ";
+		for (const auto& element : hostOutput) {
+			std::cout << element << ", ";
+		}
+		std::cout << "\n";
 	}
-	std::cout << "\n";
 
     return 0;
 }
