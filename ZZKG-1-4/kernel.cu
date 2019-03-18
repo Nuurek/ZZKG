@@ -63,10 +63,10 @@ int main()
 #include <cmath>
 #include "kernel.h"
 
-const size_t arraySize = 512;
-const size_t blockSize = 4;
+const size_t arraySize = 64;
+const size_t blockSize = 64;
 
-__global__ void inclusiveScan(int *input, int* output)
+__global__ void inclusiveScan(int *input, int* output, int log)
 {
 	__shared__ int shared[arraySize];
 
@@ -86,9 +86,13 @@ __global__ void inclusiveScan(int *input, int* output)
 
 	__syncthreads();
 
-	for (size_t i = threadId * partSize; i < (threadId + 1) * partSize; i++) {
-		previousSum += shared[i];
-		shared[i] = previousSum;
+	for (size_t i = 0; i <= log; i++) {
+		const int power = 1 << i;
+		if (threadId >= power) {
+			shared[threadId] += shared[threadId - power];
+		}
+
+		__syncthreads();
 	}
 
 	__syncthreads();
@@ -98,12 +102,23 @@ __global__ void inclusiveScan(int *input, int* output)
 	}
 }
 
+int log2(int n) {
+	int exponent = 1;
+	int power = 0;
+
+	while (exponent <= n) {
+		exponent = 1 << power++;
+	}
+
+	return power;
+}
+
 int main()
 {
 	thrust::host_vector<int> hostInput(arraySize);
 
 	for (size_t i = 0; i < arraySize; i++) {
-		hostInput[i] = i;
+		hostInput[i] = i + 1;
 		std::cout << hostInput[i] << ", ";
 	}
 	std::cout << "\n";
@@ -113,7 +128,11 @@ int main()
 
 	dim3 dimBlock(blockSize);
 	dim3 dimGrid(1);
-	inclusiveScan << <dimGrid, dimBlock>> > (deviceInput.data().get(), deviceOutput.data().get());
+	const int log = log2(arraySize - 1);
+
+	std::cout << "log2(" << arraySize << ") = " << log << "\n";
+
+	inclusiveScan << <dimGrid, dimBlock>> > (deviceInput.data().get(), deviceOutput.data().get(), log);
 
 	thrust::host_vector<int> hostOutput = deviceOutput;
 
