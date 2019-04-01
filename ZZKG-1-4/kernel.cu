@@ -63,83 +63,80 @@ int main()
 #include <cmath>
 #include "kernel.h"
 
-const size_t arraySize = 64;
-const size_t blockSize = 64;
+int factorial(unsigned int n) {
+	unsigned int result = 1;
 
-__global__ void inclusiveScan(int *input, int* output, int log)
-{
-	__shared__ int shared[arraySize];
-
-	const size_t threadId = threadIdx.x;
-	const size_t partSize = arraySize / blockSize;
-	for (size_t i = threadId * partSize; i < (threadId + 1) * partSize; i++) {
-		shared[i] = input[i];
-	}
-	
-	__syncthreads();
-
-	int previousSum = 0;
-
-	for (size_t i = 0; i < threadId * partSize; i++) {
-		previousSum += shared[i];
+	for (size_t i = 2; i <= n; i++) {
+		result *= i;
 	}
 
-	__syncthreads();
+	return result;
+}
 
-	for (size_t i = 0; i <= log; i++) {
-		const int power = 1 << i;
-		if (threadId >= power) {
-			shared[threadId] += shared[threadId - power];
-		}
-
-		__syncthreads();
-	}
-
-	__syncthreads();
-
-	for (size_t i = threadId * partSize; i < (threadId + 1) * partSize; i++) {
-		output[i] = shared[i];
+void initializeRoute(unsigned int *route, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		route[i] = i;
 	}
 }
 
-int log2(int n) {
-	int exponent = 1;
-	int power = 0;
+const size_t N = 5;
+const size_t numberOfPermutations = factorial(N);
+unsigned int initialRoute[N];
 
-	while (exponent <= n) {
-		exponent = 1 << power++;
+__global__ void salesman(unsigned int *initialRoute, unsigned int n, unsigned int* output)
+{
+	const size_t threadId = threadIdx.x;
+	const size_t outputIndex = threadId * n;
+	unsigned int *factoradic = new unsigned int[n];
+
+	int x = threadId;
+	for (size_t i = 1; x != 0; i++) {
+		factoradic[n - i] = x % i;
+		x = x / i;
 	}
 
-	return power;
+	unsigned int * route = new unsigned int[n];
+	for (size_t i = 0; i < n; i++) {
+		//output[outputIndex + i] = route[factoradic[i]];
+
+		//for (size_t j = factoradic[i]; j < n - 1; j++) {
+
+		//}
+		output[outputIndex + i] = factoradic[i];
+	}
+
+	delete[] factoradic;
 }
 
 int main()
 {
-	thrust::host_vector<int> hostInput(arraySize);
+	//thrust::host_vector<int> hostInput(arraySize);
 
-	for (size_t i = 0; i < arraySize; i++) {
-		hostInput[i] = i + 1;
-		std::cout << hostInput[i] << ", ";
-	}
-	std::cout << "\n";
+	//for (size_t i = 0; i < arraySize; i++) {
+	//	hostInput[i] = i + 1;
+	//	std::cout << hostInput[i] << ", ";
+	//}
+	//std::cout << "\n";
 
-	thrust::device_vector<int> deviceInput = hostInput;
-	thrust::device_vector<int> deviceOutput(arraySize);
+	//thrust::device_vector<int> deviceInput = hostInput;
+	const size_t arraySize = numberOfPermutations * N;
+	initializeRoute(initialRoute, N);
+	thrust::device_vector<unsigned int> deviceOutput(arraySize);
 
-	dim3 dimBlock(blockSize);
+	dim3 dimBlock(numberOfPermutations);
 	dim3 dimGrid(1);
-	const int log = log2(arraySize - 1);
 
-	std::cout << "log2(" << arraySize << ") = " << log << "\n";
+	salesman << <dimGrid, dimBlock>> > (initialRoute, N, deviceOutput.data().get());
 
-	inclusiveScan << <dimGrid, dimBlock>> > (deviceInput.data().get(), deviceOutput.data().get(), log);
+	thrust::host_vector<unsigned int> hostOutput = deviceOutput;
 
-	thrust::host_vector<int> hostOutput = deviceOutput;
-
-	for (const auto& element : hostOutput) {
-		std::cout << element << ", ";
+	for (size_t threadId = 0; threadId < numberOfPermutations; threadId++) {
+		const size_t outputStart = threadId * N;
+		for (size_t i = 0; i < N; i++) {
+			std::cout << hostOutput[outputStart + i];
+		}
+		std::cout << "\n";
 	}
-	std::cout << "\n";
 
     return 0;
 }
