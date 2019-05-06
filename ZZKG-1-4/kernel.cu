@@ -14,43 +14,39 @@
 
 const size_t vectorSize = 16;
 
-__global__ void mapToBits(int* input, int length, int* output) {
-	const size_t index = threadIdx.x;
-	output[index] = __popc(input[index]);
-}
-
-struct sumBits : public thrust::binary_function<int, int, int>
+struct isGreaterThanTen : public thrust::binary_function<int, int, int>
 {
-	__device__ int operator()(int x, int y) {
-		return x + y;
+	__device__ int operator()(int x) {
+		return x > 10;
 	}
 };
 
 int main() {
-	thrust::host_vector<int> hostInput(vectorSize);
+	thrust::host_vector<int> hostInputNumbers(vectorSize);
+	thrust::host_vector<int> hostInputIndices(vectorSize);
 
-	for (auto& element : hostInput) {
-		element = std::rand();
-		std::cout << element << ", ";
+	for (size_t i = 0; i < vectorSize; i++) {
+		hostInputNumbers[i] = std::rand() % 32;
+		std::cout << hostInputNumbers[i]  << ", ";
+		hostInputIndices[i] = i;
 	}
 	std::cout << "\n";
 
-	thrust::device_vector<int> deviceInput = hostInput;
-	thrust::device_vector<int> deviceOutput(vectorSize);
+	thrust::device_vector<int> deviceInputNumbers = hostInputNumbers;
+	thrust::device_vector<int> deviceInputIndices = hostInputIndices;
 
 	dim3 dimBlock(vectorSize);
 	dim3 dimGrid(1);
-	mapToBits<<<dimGrid, dimBlock>>>(deviceInput.data().get(), vectorSize, deviceOutput.data().get());
 
-	thrust::host_vector<int> hostBits = deviceOutput;
-	for (const auto& bits : hostBits) {
-		std::cout << bits << ", ";
+	thrust::device_vector<int> deviceOutput(vectorSize);
+	thrust::copy_if(deviceInputIndices.begin(), deviceInputIndices.end(), deviceInputNumbers.begin(), deviceOutput.begin(), isGreaterThanTen());
+
+	thrust::host_vector<int> hostOutput = deviceOutput;
+
+	for (const auto& element : hostOutput) {
+		std::cout << element << ", ";
 	}
 	std::cout << "\n";
-	thrust::device_vector<int> deviceBits = hostBits;
-
-	int summedBits = thrust::reduce(deviceBits.begin(), deviceBits.end(), 0);
-	std::cout << summedBits << "\n";
 
 	return 0;
 }
