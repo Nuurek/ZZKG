@@ -9,6 +9,7 @@
 #include <thrust/functional.h>
 #include <thrust/copy.h>
 #include <thrust/device_ptr.h>
+#include <thrust/iterator/counting_iterator.h>
 #include <random>
 #include <iostream>
 
@@ -23,23 +24,24 @@ struct isGreaterThanTen : public thrust::binary_function<int, int, int>
 
 int main() {
 	thrust::host_vector<int> hostInputNumbers(vectorSize);
-	thrust::host_vector<int> hostInputIndices(vectorSize);
 
 	for (size_t i = 0; i < vectorSize; i++) {
 		hostInputNumbers[i] = std::rand() % 32;
 		std::cout << hostInputNumbers[i]  << ", ";
-		hostInputIndices[i] = i;
 	}
 	std::cout << "\n";
 
+	thrust::counting_iterator<int> deviceFirstIndex = thrust::make_counting_iterator(0);
+	thrust::counting_iterator<int> deviceLastIndex = thrust::make_counting_iterator((int)vectorSize);
 	thrust::device_vector<int> deviceInputNumbers = hostInputNumbers;
-	thrust::device_vector<int> deviceInputIndices = hostInputIndices;
-
-	dim3 dimBlock(vectorSize);
-	dim3 dimGrid(1);
-
 	thrust::device_vector<int> deviceOutput(vectorSize);
-	thrust::copy_if(deviceInputIndices.begin(), deviceInputIndices.end(), deviceInputNumbers.begin(), deviceOutput.begin(), isGreaterThanTen());
+	thrust::copy_if(
+		deviceFirstIndex,
+		deviceLastIndex,
+		deviceInputNumbers.begin(), 
+		deviceOutput.begin(), 
+		isGreaterThanTen()
+	);
 
 	thrust::host_vector<int> hostOutput = deviceOutput;
 
